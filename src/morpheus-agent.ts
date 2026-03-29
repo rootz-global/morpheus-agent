@@ -597,54 +597,43 @@ export class MorpheusAgent {
   }
 
   /**
-   * Archive the session content via Desktop MCP create_archive.
-   * Returns the archive Secret address.
+   * Archive the session content as a Note on the Sovereign Secret.
+   *
+   * Writes via agent_write_note — appends to the existing Secret.
+   * Same conversation stays in one place. NoteManager handles
+   * >1KB → IPFS automatically (encrypted, content-addressed).
+   *
+   * Cost: ~0.01 POL per Note (vs ~0.41 POL for create_archive which
+   * deploys a new Secret contract each time).
+   *
+   * Returns the Sovereign Secret address (same address, new Note).
    */
   private async archiveSession(content: string): Promise<string | undefined> {
     const sessionToken = process.env.AGENT_SESSION_TOKEN;
 
-    // Build tags from session data
-    const tags = [
-      'morpheus',
-      'agent-session',
-      this.config.defaultModel,
-      `agent:${this.state.agentAddress.slice(0, 10)}`,
-    ];
-
-    // Extract topic keywords from actions
-    for (const action of this.state.sessionActions) {
-      if (action.topic) {
-        // Simple keyword extraction: split on spaces, take notable words
-        const words = action.topic.split(/\s+/).filter(w => w.length > 4);
-        tags.push(...words.slice(0, 3));
-      }
-    }
-
-    // Deduplicate tags
-    const uniqueTags = [...new Set(tags.map(t => t.toLowerCase()))];
-
-    const title = `Morpheus Agent Session — ${this.state.agentAddress.slice(0, 10)} — ${new Date().toISOString().split('T')[0]}`;
-
     if (this.config.keySource === 'relay' && this.config.relayUrl && sessionToken) {
-      // Production: archive via Desktop MCP relay
-      const result = await callDesktopRelay(
+      // Production: write session archive as Note on Sovereign Secret
+      // NoteManager handles encryption + IPFS for large content
+      await callDesktopRelay(
         this.config.relayUrl,
         sessionToken,
-        'create_archive',
+        'agent_write_note',
         {
-          title,
           content,
-          tags: uniqueTags,
-          templateType: 'RESEARCH',
-          localOnly: false, // Write to chain
+          secretAddress: this.state.sovereignSecretAddress,
         }
-      ) as { address?: string };
+      );
 
-      return result?.address;
+      console.error(`[Morpheus] Session archived as Note on ${this.state.sovereignSecretAddress}`);
+      return this.state.sovereignSecretAddress;
     } else {
       // Local mode: log content size
-      console.error(`[Morpheus] [LOCAL] Session archive: ${content.length} bytes, ${uniqueTags.length} tags`);
-      console.error(`[Morpheus] [LOCAL] Tags: ${uniqueTags.join(', ')}`);
+      const tags = [
+        'morpheus', 'agent-session', this.config.defaultModel,
+        `agent:${this.state.agentAddress.slice(0, 10)}`,
+      ];
+      console.error(`[Morpheus] [LOCAL] Session archive: ${content.length} bytes`);
+      console.error(`[Morpheus] [LOCAL] Tags: ${tags.join(', ')}`);
       return undefined;
     }
   }

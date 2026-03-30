@@ -21,6 +21,7 @@
     "@rootz/crypto": "*",
     "@rootz/integration": "*",
     "@rootz/notes": "*",
+    "@rootz/agent-runtime": "*",
     "@rootz/tee-policy": "*",
     "ethers": "^6.9.0",
     "node-fetch": "^3.3.2"
